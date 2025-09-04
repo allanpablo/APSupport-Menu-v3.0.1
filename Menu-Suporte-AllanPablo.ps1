@@ -46,10 +46,10 @@ $Global:CfgPath   = Join-Path $APRoot 'config.json'
 $null = New-Item -ItemType Directory -Path $APRoot -Force -ErrorAction SilentlyContinue
 
 $DefaultConfig = @{
-  Theme    = 'dark';
+  Theme    = 'Default';
   Profile  = 'Completo';   # Rapido | Padrao | Completo
   Confirm  = $true;        # se Padrao
-  Operator = 'Allan';
+  Operator = 'Allan Pablo';
 }
 
 function Save-Config([hashtable]$cfg) {
@@ -124,17 +124,122 @@ function Add-RunLog([string]$action,[string]$status,[string]$details) {
     $null = $global:RunLog.Add([pscustomobject]@{ Time=(Get-Date); Action=$action; Status=$status; Details=$details })
 }
 
+# === Banner helpers (Unicode-safe, ASCII fallback) ===
+function Get-BoxCharset {
+    param([switch]$Ascii)
+    if ($Ascii) {
+        return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
+    }
+    try {
+        return @{
+            TL=[char]0x2554; TR=[char]0x2557; BL=[char]0x255A; BR=[char]0x255D;
+            H=[char]0x2550;   V=[char]0x2551;  ML=[char]0x255F; MR=[char]0x2562; MH=[char]0x2500
+        }
+    } catch {
+        return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
+    }
+}
+
+function New-Badge([string]$label,[string]$fg='Black',[string]$bg='DarkCyan') {
+    try {
+        Write-Host -NoNewline (' [' + $label + '] ') -ForegroundColor $fg -BackgroundColor $bg
+    } catch {
+        Write-Host -NoNewline (' [' + $label + '] ')
+    }
+}
+
+function Format-Right([string]$left,[string]$right,[int]$width) {
+    $maxLeft = [Math]::Max(0, $width - $right.Length - 1)
+    if ($left.Length -gt $maxLeft) { $left = $left.Substring(0, $maxLeft) }
+    $spaces = [Math]::Max(1, $width - $left.Length - $right.Length)
+    return ($left + (' ' * $spaces) + $right)
+}
+# === end helpers ===
+
+
+
 function Header($title) {
     Clear-Host
-    Write-Host ('=' * 70) -ForegroundColor $Theme.Border
-    Write-Host ('  MENU DE SUPORTE E REPARO - ALLAN PABLO (v3.0.1)  ') -ForegroundColor $Theme.Banner
-    Write-Host ('=' * 70) -ForegroundColor $Theme.Border
-    $opShown = $(if ($Global:Operator) { $Global:Operator } else { 'N/A' })
-    Write-Host ('Operador: ' + $opShown + '  |  Perfil: ' + $Global:ProfileMode + '  |  Tema: ' + $ThemeName) -ForegroundColor $Theme.Text
-    if ($title) { Write-Host (':: ' + $title) -ForegroundColor $Theme.Warn }
-    Write-Host ('Log: ' + $global:LogFile) -ForegroundColor DarkGray
+
+    # Fallback automático para ASCII caso seu console não renderize Unicode
+    $ascii = $false
+    try { $null = [Console]::OutputEncoding } catch { $ascii = $true }
+
+    # Tabela de caracteres do quadro (Unicode → ASCII se necessário)
+    function Get-BoxCharset {
+        param([switch]$Ascii)
+        if ($Ascii) {
+            return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
+        }
+        return @{
+            TL=[char]0x2554; TR=[char]0x2557; BL=[char]0x255A; BR=[char]0x255D;
+            H=[char]0x2550;  V=[char]0x2551;  ML=[char]0x255F; MR=[char]0x2562; MH=[char]0x2500
+        }
+    }
+
+    $cs    = Get-BoxCharset -Ascii:$ascii
+    $winW  = $Host.UI.RawUI.WindowSize.Width
+    $innerW = [Math]::Min([Math]::Max(60, $winW - 6), 110)   # largura alvo
+
+    # ===== BARRAS (PS 5.1-safe) =====
+    # Em vez de [char]*[int], usamos o construtor de string do .NET:
+    $hbarTop = New-Object string ($cs.H,  ($innerW + 2))
+    $mhbar   = New-Object string ($cs.MH, ($innerW + 2))
+    $hbarBot = New-Object string ($cs.H,  ($innerW + 2))
+
+    $top    = ("{0}{1}{2}" -f $cs.TL, $hbarTop, $cs.TR)
+    $sep    = ("{0}{1}{2}" -f $cs.ML, $mhbar,   $cs.MR)
+    $bottom = ("{0}{1}{2}" -f $cs.BL, $hbarBot, $cs.BR)
+
+    $ver = 'v3.0.1'
+
+    # Título sem símbolos “•” para evitar mojibake em consoles não-UTF8
+    $titleLeft = 'APSupport - Menu de Suporte e Reparo'
+    function Format-Right([string]$left,[string]$right,[int]$width) {
+        $maxLeft = [Math]::Max(0, $width - $right.Length - 1)
+        if ($left.Length -gt $maxLeft) { $left = $left.Substring(0, $maxLeft) }
+        $spaces = [Math]::Max(1, $width - $left.Length - $right.Length)
+        return ($left + (' ' * $spaces) + $right)
+    }
+    $line1 = Format-Right $titleLeft $ver $innerW
+
+    $sub  = if ($title) { ':: ' + $title } else { '' }
+    $op   = $(if ($Global:Operator) { $Global:Operator } else { 'N/A' })
+    $meta1 = ('Operador: {0}    Perfil: {1}    Tema: {2}' -f $op, $Global:ProfileMode, $ThemeName)
+    $meta2 = ('Log: {0}' -f $global:LogFile)
+
+    # Badges helper
+    function New-Badge([string]$label,[string]$fg='Black',[string]$bg='DarkCyan') {
+        try { Write-Host -NoNewline (' [' + $label + '] ') -ForegroundColor $fg -BackgroundColor $bg }
+        catch { Write-Host -NoNewline (' [' + $label + '] ') }
+    }
+
+    # ===== Render =====
+    Write-Host $top -ForegroundColor $Theme.Border
+    Write-Host ($cs.V + ' ' + $line1.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Banner
+    Write-Host $sep -ForegroundColor $Theme.Border
+    if ($sub) { Write-Host ($cs.V + ' ' + $sub.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Warn }
+    Write-Host ($cs.V + ' ' + $meta1.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Text
+    Write-Host ($cs.V + ' ' + $meta2.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor DarkGray
+
+    # Badges
+    Write-Host ($cs.V + ' ') -NoNewline -ForegroundColor $Theme.Border
+    New-Badge 'ADMIN' 'White' 'DarkGreen'
+    New-Badge 'VERBOSE ON' 'Black' 'Yellow'
+    New-Badge 'PS 5.1' 'White' 'DarkBlue'
+    $wu  = if ($Global:EnvInfo.WU_Running) { 'WU: Running' } else { 'WU: Stopped' }
+    $wuB = if ($Global:EnvInfo.WU_Running) { 'DarkGreen' } else { 'DarkRed' }
+    New-Badge $wu 'White' $wuB
+    $curr = [Console]::CursorLeft
+    $remain = [Math]::Max(0, ($innerW + 3) - $curr)
+    Write-Host (' ' * $remain) -NoNewline
+    Write-Host $cs.V -ForegroundColor $Theme.Border
+
+    Write-Host $bottom -ForegroundColor $Theme.Border
     Write-Host
 }
+
+
 
 function Generate-Report {
     try {
