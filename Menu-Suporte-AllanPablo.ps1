@@ -1,3 +1,4 @@
+
 <# 
     MENU DE SUPORTE E REPARO - ALLAN PABLO (v3.0.1)
     Autor original: Pablo Oliveira  •  Revisado por: Allan Pablo
@@ -20,25 +21,14 @@ function Ensure-Admin {
     }
 }
 Ensure-Admin
-#endregion
 
-#region Desbloquear o arquivo (Zone.Identifier) e preferencia de detalhes
-try {
-    Unblock-File -Path $PSCommandPath -ErrorAction SilentlyContinue
-} catch {
-    try { $ads = "$PSCommandPath:Zone.Identifier"; if (Test-Path $ads) { Remove-Item $ads -Force } } catch {}
-}
-# Sempre exibir detalhes (quando comandos respeitarem Verbose/Information)
-$VerbosePreference = 'Continue'
-$InformationPreference = 'Continue'
-#endregion
 
 #region Console/Encoding
 try {
     [Console]::InputEncoding  = [System.Text.Encoding]::UTF8
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {}
-#endregion
+
 
 #region Configuracao/Temas/Perfis
 $Global:APRoot    = Join-Path $env:ProgramData 'APSupport'
@@ -46,10 +36,10 @@ $Global:CfgPath   = Join-Path $APRoot 'config.json'
 $null = New-Item -ItemType Directory -Path $APRoot -Force -ErrorAction SilentlyContinue
 
 $DefaultConfig = @{
-  Theme    = 'Default';
+  Theme    = 'dark';
   Profile  = 'Completo';   # Rapido | Padrao | Completo
   Confirm  = $true;        # se Padrao
-  Operator = 'Allan Pablo';
+  Operator = 'Allan';
 }
 
 function Save-Config([hashtable]$cfg) {
@@ -106,7 +96,7 @@ if ([string]::IsNullOrWhiteSpace($Config.Operator)) {
   }
 }
 $Global:Operator = $Config.Operator
-#endregion
+
 
 #region Logging, Relatorio HTML, Progresso
 $global:LogRoot = Join-Path $APRoot 'logs'
@@ -124,122 +114,20 @@ function Add-RunLog([string]$action,[string]$status,[string]$details) {
     $null = $global:RunLog.Add([pscustomobject]@{ Time=(Get-Date); Action=$action; Status=$status; Details=$details })
 }
 
-# === Banner helpers (Unicode-safe, ASCII fallback) ===
-function Get-BoxCharset {
-    param([switch]$Ascii)
-    if ($Ascii) {
-        return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
-    }
-    try {
-        return @{
-            TL=[char]0x2554; TR=[char]0x2557; BL=[char]0x255A; BR=[char]0x255D;
-            H=[char]0x2550;   V=[char]0x2551;  ML=[char]0x255F; MR=[char]0x2562; MH=[char]0x2500
-        }
-    } catch {
-        return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
-    }
-}
-
-function New-Badge([string]$label,[string]$fg='Black',[string]$bg='DarkCyan') {
-    try {
-        Write-Host -NoNewline (' [' + $label + '] ') -ForegroundColor $fg -BackgroundColor $bg
-    } catch {
-        Write-Host -NoNewline (' [' + $label + '] ')
-    }
-}
-
-function Format-Right([string]$left,[string]$right,[int]$width) {
-    $maxLeft = [Math]::Max(0, $width - $right.Length - 1)
-    if ($left.Length -gt $maxLeft) { $left = $left.Substring(0, $maxLeft) }
-    $spaces = [Math]::Max(1, $width - $left.Length - $right.Length)
-    return ($left + (' ' * $spaces) + $right)
-}
-# === end helpers ===
-
-
-
+# Header basico (o add-on UI.Banner.Safe.ps1 irá substituir este Header com UI bonitona)
 function Header($title) {
     Clear-Host
-
-    # Fallback automático para ASCII caso seu console não renderize Unicode
-    $ascii = $false
-    try { $null = [Console]::OutputEncoding } catch { $ascii = $true }
-
-    # Tabela de caracteres do quadro (Unicode → ASCII se necessário)
-    function Get-BoxCharset {
-        param([switch]$Ascii)
-        if ($Ascii) {
-            return @{ TL='+'; TR='+'; BL='+'; BR='+'; H='='; V='|'; ML='+'; MR='+'; MH='-' }
-        }
-        return @{
-            TL=[char]0x2554; TR=[char]0x2557; BL=[char]0x255A; BR=[char]0x255D;
-            H=[char]0x2550;  V=[char]0x2551;  ML=[char]0x255F; MR=[char]0x2562; MH=[char]0x2500
-        }
-    }
-
-    $cs    = Get-BoxCharset -Ascii:$ascii
-    $winW  = $Host.UI.RawUI.WindowSize.Width
-    $innerW = [Math]::Min([Math]::Max(60, $winW - 6), 110)   # largura alvo
-
-    # ===== BARRAS (PS 5.1-safe) =====
-    # Em vez de [char]*[int], usamos o construtor de string do .NET:
-    $hbarTop = New-Object string ($cs.H,  ($innerW + 2))
-    $mhbar   = New-Object string ($cs.MH, ($innerW + 2))
-    $hbarBot = New-Object string ($cs.H,  ($innerW + 2))
-
-    $top    = ("{0}{1}{2}" -f $cs.TL, $hbarTop, $cs.TR)
-    $sep    = ("{0}{1}{2}" -f $cs.ML, $mhbar,   $cs.MR)
-    $bottom = ("{0}{1}{2}" -f $cs.BL, $hbarBot, $cs.BR)
-
     $ver = 'v3.0.1'
-
-    # Título sem símbolos “•” para evitar mojibake em consoles não-UTF8
-    $titleLeft = 'APSupport - Menu de Suporte e Reparo'
-    function Format-Right([string]$left,[string]$right,[int]$width) {
-        $maxLeft = [Math]::Max(0, $width - $right.Length - 1)
-        if ($left.Length -gt $maxLeft) { $left = $left.Substring(0, $maxLeft) }
-        $spaces = [Math]::Max(1, $width - $left.Length - $right.Length)
-        return ($left + (' ' * $spaces) + $right)
-    }
-    $line1 = Format-Right $titleLeft $ver $innerW
-
-    $sub  = if ($title) { ':: ' + $title } else { '' }
-    $op   = $(if ($Global:Operator) { $Global:Operator } else { 'N/A' })
-    $meta1 = ('Operador: {0}    Perfil: {1}    Tema: {2}' -f $op, $Global:ProfileMode, $ThemeName)
-    $meta2 = ('Log: {0}' -f $global:LogFile)
-
-    # Badges helper
-    function New-Badge([string]$label,[string]$fg='Black',[string]$bg='DarkCyan') {
-        try { Write-Host -NoNewline (' [' + $label + '] ') -ForegroundColor $fg -BackgroundColor $bg }
-        catch { Write-Host -NoNewline (' [' + $label + '] ') }
-    }
-
-    # ===== Render =====
-    Write-Host $top -ForegroundColor $Theme.Border
-    Write-Host ($cs.V + ' ' + $line1.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Banner
+    $sep = New-Object string ('=', 90)
+    $opShown = $(if ($Global:Operator) { $Global:Operator } else { 'N/A' })
     Write-Host $sep -ForegroundColor $Theme.Border
-    if ($sub) { Write-Host ($cs.V + ' ' + $sub.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Warn }
-    Write-Host ($cs.V + ' ' + $meta1.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor $Theme.Text
-    Write-Host ($cs.V + ' ' + $meta2.PadRight($innerW) + ' ' + $cs.V) -ForegroundColor DarkGray
-
-    # Badges
-    Write-Host ($cs.V + ' ') -NoNewline -ForegroundColor $Theme.Border
-    New-Badge 'ADMIN' 'White' 'DarkGreen'
-    New-Badge 'VERBOSE ON' 'Black' 'Yellow'
-    New-Badge 'PS 5.1' 'White' 'DarkBlue'
-    $wu  = if ($Global:EnvInfo.WU_Running) { 'WU: Running' } else { 'WU: Stopped' }
-    $wuB = if ($Global:EnvInfo.WU_Running) { 'DarkGreen' } else { 'DarkRed' }
-    New-Badge $wu 'White' $wuB
-    $curr = [Console]::CursorLeft
-    $remain = [Math]::Max(0, ($innerW + 3) - $curr)
-    Write-Host (' ' * $remain) -NoNewline
-    Write-Host $cs.V -ForegroundColor $Theme.Border
-
-    Write-Host $bottom -ForegroundColor $Theme.Border
+    Write-Host ("APSupport - Menu de Suporte e Reparo  {0}" -f $ver) -ForegroundColor $Theme.Banner
+    if ($title) { Write-Host (':: ' + $title) -ForegroundColor $Theme.Warn }
+    Write-Host ("Operador: {0}  |  Perfil: {1}  |  Tema: {2}" -f $opShown, $Global:ProfileMode, $ThemeName) -ForegroundColor $Theme.Text
+    Write-Host ('Log: ' + $global:LogFile) -ForegroundColor DarkGray
+    Write-Host $sep -ForegroundColor $Theme.Border
     Write-Host
 }
-
-
 
 function Generate-Report {
     try {
@@ -292,9 +180,9 @@ function Show-ProgressBlock([string]$Activity,[scriptblock]$Block) {
         Write-Progress -Activity $Activity -Completed
     }
 }
-#endregion
 
-#region Auto-deteccao de ambiente (PS 5.1-friendly)
+
+#region Auto-deteccao de ambiente
 $svcWU = $null
 try { $svcWU = Get-Service wuauserv -ErrorAction SilentlyContinue } catch {}
 $WU = $false
@@ -309,7 +197,7 @@ $Global:EnvInfo = [pscustomobject]@{
 try {
   $Global:EnvInfo.Disks = Get-PhysicalDisk | Select-Object FriendlyName,MediaType,Size,HealthStatus
 } catch { $Global:EnvInfo.Disks = @() }
-#endregion
+
 
 #region Utilitarios
 function Pause-Return { Write-Host ''; Read-Host 'Pressione ENTER para voltar ao menu' | Out-Null }
@@ -328,9 +216,9 @@ function Set-ThemeAndProfile {
     Write-Host 'Tema/Perfil atualizados.' -ForegroundColor $Theme.Accent
     Pause-Return
 }
-#endregion
 
-#region Acoes principais (A01..A28)
+
+#region Acoes principais (A01..A36)
 function A01-ChkDsk {
     Header 'Verificar/Agendar CHKDSK'
     $drive  = (Read-Host 'Informe a letra da unidade (ex: C)').Trim().TrimEnd(':')
@@ -617,7 +505,7 @@ function A28-BrowserCleanup {
     Add-RunLog 'Browser Cleanup' 'OK' 'cache'
     Pause-Return
 }
-#endregion
+
 
 #region Novas acoes (A29..A36)
 function A29-ResetSpooler {
@@ -728,9 +616,9 @@ function A35-RegistryBackup {
 }
 
 function A36-ThemeProfile { Set-ThemeAndProfile }
-#endregion
 
-#region Menu / UI
+
+#region Menu / UI (base)
 $MenuItems = @(
     @{ Id=1;  Title='Verificar/Agendar CHKDSK';          Action={ A01-ChkDsk } },
     @{ Id=2;  Title='Reparar Arquivos de Sistema (SFC)';  Action={ A02-SFC } },
@@ -770,23 +658,44 @@ $MenuItems = @(
     @{ Id=36; Title='Trocar Tema/Perfil (persistente)';   Action={ A36-ThemeProfile } }
 )
 
-function Menu-Grid([array]$Items) {
+# === Carrega a arvore modular (banner/agrupamento/add-ons) ===
+try {
+  . "$PSScriptRoot\ap-support-structured\APSupport.Setup.Include.ps1"
+} catch {
+  Write-Host 'Falha ao carregar include modular. Continuando com menu basico...' -ForegroundColor Yellow
+}
+
+# === Fallback Menu-Grid/Show-Menu (serao sobrescritos pelo agrupador, se carregado) ===
+if (-not (Get-Command Menu-Grid -ErrorAction SilentlyContinue)) {
+  function Menu-Grid([array]$Items) {
     if (Get-Command Out-GridView -ErrorAction SilentlyContinue) {
-        try { $sel = $Items | Select-Object Id, Title | Out-GridView -Title 'Menu - Allan Pablo (selecione e clique OK)' -OutputMode Single -PassThru; if ($sel) { return $sel.Id } else { return $null } } catch { return $null }
+      try {
+        $sel = $Items | Select-Object Id, Title |
+          Out-GridView -Title 'Menu - Allan Pablo (selecione e clique OK)' -OutputMode Single -PassThru
+        if ($sel) { return $sel.Id } else { return $null }
+      } catch { return $null }
     } else { return $null }
+  }
 }
 
-function Show-Menu {
+if (-not (Get-Command Show-Menu -ErrorAction SilentlyContinue)) {
+  function Show-Menu {
     Header $null
-    foreach ($m in $MenuItems) { Write-Host ("{0,2}. {1}" -f $m.Id, $m.Title) -ForegroundColor $Theme.Accent }
+    foreach ($m in $MenuItems) {
+      Write-Host ("{0,2}. {1}" -f $m.Id, $m.Title) -ForegroundColor $Theme.Accent
+    }
     Write-Host ' 0. Sair' -ForegroundColor Yellow
+  }
 }
 
+
+#region Loop principal
 while ($true) {
     $chosenId = Menu-Grid -Items $MenuItems
     if (-not $chosenId) {
         Show-Menu
-        $input = Read-Host "`nEscolha uma opcao (0-36)"
+        $maxId = ($MenuItems | Measure-Object -Property Id -Maximum).Maximum
+        $input = Read-Host ("`nEscolha uma opcao (0-{0})" -f $maxId)
         if ($input -eq '0') { break }
         if ($input -notmatch '^\d+$') { Write-Host 'Opcao invalida.' -ForegroundColor $Theme.Error; Start-Sleep -Milliseconds 800; continue }
         $chosenId = [int]$input
@@ -798,7 +707,7 @@ while ($true) {
     & $item.Action
 }
 
+
 # Ao sair, gera relatorio
 Generate-Report
 Write-Host 'Ate logo!' -ForegroundColor $Theme.Banner
-#endregion

@@ -1,0 +1,1 @@
+Coloque aqui seu screenshot do relatório: docs/img/report-example.png
